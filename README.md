@@ -28,44 +28,7 @@ This system allows:
 
 ---
 
-## 2. Project Structure
-
-The project is organized into a monorepo, containing both the Django backend and the Flutter frontend:
-
-
-Voting Features System/
-├── feature_voting_app/         # Flutter project root (Frontend)
-│   ├── lib/
-│   │   ├── models/             # Data model definitions (User, Feature)
-│   │   ├── providers/          # State management logic (Auth, Feature)
-│   │   ├── screens/            # Flutter application screens
-│   │   └── services/           # API communication layer (ApiService)
-│   ├── test/
-│   │   ├── unit/               # Unit tests (Models, Providers)
-│   │   └── widget_integration/ # Widget and integration tests (Screens, Flows)
-│   ├── pubspec.yaml            # Flutter project dependencies and metadata
-│   └── pub_get.sh              # Script to install Flutter dependencies
-├── feature_voting_backend/     # Django project root (Backend)
-│   ├── features/               # Django app for feature and voting functionalities
-│   │   ├── models.py
-│   │   ├── serializers.py
-│   │   ├── tests.py
-│   │   └── views.py
-│   ├── users/                  # Django app for user management and authentication
-│   │   ├── admin.py
-│   │   ├── models.py
-│   │   ├── tests.py
-│   │   ├── urls.py
-│   │   ├── runserver.sh        # Script to start Django server
-│   │   ├── settings.py
-│   │   └── makemigrations.sh   # Script to apply database migrations
-│   ├── mk_environment_voting_system.sh # Script to set up Python environment
-│   └── README.md               # This file
-
-
----
-
-## 3. Prerequisites
+## 2 Prerequisites
 
 To set up and run this project locally, you will need the following software installed on your machine:
 
