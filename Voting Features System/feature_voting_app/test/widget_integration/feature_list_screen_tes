@@ -1,0 +1,332 @@
+// test/widget_integration/feature_list_screen_test.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:provider/provider.dart';
+import 'package:feature_voting_app/screens/feature_list_screen.dart';
+import 'package:feature_voting_app/providers/auth_provider.dart';
+import 'package:feature_voting_app/providers/feature_provider.dart';
+import 'package:feature_voting_app/services/api_service.dart';
+import 'package:feature_voting_app/models/feature.dart';
+import 'package:feature_voting_app/models/user.dart';
+
+import '../unit/auth_provider_test.mocks.dart'; // Re-use MockApiService
+import '../unit/feature_provider_test.mocks.dart'; // Re-use MockFeatureProvider
+
+// Define a test user
+final testUser = User(id: 'user1', username: 'testuser', email: 'test@example.com');
+
+// Define mock features
+final mockFeatures = [
+  Feature(
+    id: 'f1',
+    title: 'Awesome Feature',
+    description: 'This is an awesome feature idea.',
+    status: 'Open',
+    createdBy: testUser,
+    createdAt: DateTime.parse('2025-07-20T10:00:00Z'),
+    updatedAt: DateTime.parse('2025-07-20T10:00:00Z'),
+    voteCount: 10,
+    hasVoted: false,
+  ),
+  Feature(
+    id: 'f2',
+    title: 'Another Great Idea',
+    description: 'Description for another great idea.',
+    status: 'Under Review',
+    createdBy: User(id: 'user2', username: 'otheruser', email: 'other@example.com'),
+    createdAt: DateTime.parse('2025-07-21T11:00:00Z'),
+    updatedAt: DateTime.parse('2025-07-21T11:00:00Z'),
+    voteCount: 5,
+    hasVoted: true,
+  ),
+];
+
+void main() {
+  group('FeatureListScreen', () {
+    late MockApiService mockApiService;
+    late AuthProvider authProvider;
+    late FeatureProvider featureProvider;
+
+    Widget createFeatureListScreen() {
+      mockApiService = MockApiService();
+      authProvider = AuthProvider().._apiService = mockApiService; // Inject mock
+      featureProvider = FeatureProvider().._apiService = mockApiService; // Inject mock
+
+      // Mock initial API calls that providers make on startup
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => null); // Start unauthenticated
+      when(mockApiService.getFeatures()).thenAnswer((_) async => mockFeatures);
+
+      return MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+          ChangeNotifierProvider<FeatureProvider>.value(value: featureProvider),
+        ],
+        child: MaterialApp(
+          home: const FeatureListScreen(),
+          routes: {
+            '/auth': (context) => const Scaffold(body: Text('Auth Screen')),
+            '/add-feature': (context) => const Scaffold(body: Text('Add Feature Screen')),
+          },
+        ),
+      );
+    }
+
+    testWidgets('displays loading indicator initially then features', (WidgetTester tester) async {
+      await tester.pumpWidget(createFeatureListScreen());
+
+      // Should see loading indicator first
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // Wait for fetchFeatures to complete
+      await tester.pumpAndSettle();
+
+      // After loading, features should be displayed
+      expect(find.text('Awesome Feature'), findsOneWidget);
+      expect(find.text('This is an awesome feature idea.'), findsOneWidget);
+      expect(find.text('Another Great Idea'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      verify(mockApiService.getFeatures()).called(1); // Verify API call was made
+    });
+
+    testWidgets('displays error message if features fail to load', (WidgetTester tester) async {
+      when(mockApiService.getFeatures()).thenThrow(Exception('Failed to connect')); // Simulate error
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Failed to load features: Exception: Failed to connect'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(FeatureCard), findsNothing); // No feature cards should be displayed
+    });
+
+    testWidgets('displays "Login" button when unauthenticated', (WidgetTester tester) async {
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextButton, 'Login'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Logout'), findsNothing);
+      expect(find.byIcon(Icons.add), findsNothing); // Add button hidden
+    });
+
+    testWidgets('displays "Logout" and "Add" buttons when authenticated', (WidgetTester tester) async {
+      // Simulate user login
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async => mockFeatures);
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle(); // Initial loading for AuthProvider
+      await tester.pumpAndSettle(); // Initial loading for FeatureProvider
+
+      expect(find.widgetWithText(TextButton, 'Login'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Logout'), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget); // Add button visible
+    });
+
+    testWidgets('navigates to AuthScreen on logout', (WidgetTester tester) async {
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async => mockFeatures);
+      when(mockApiService.logout()).thenAnswer((_) async => Future.value()); // Mock logout call
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Logout'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Auth Screen'), findsOneWidget); // Verify navigation
+      verify(mockApiService.logout()).called(1);
+      expect(authProvider.isAuthenticated, isFalse);
+    });
+
+    testWidgets('navigates to AddFeatureScreen when add button is tapped (authenticated)', (WidgetTester tester) async {
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async => mockFeatures);
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add Feature Screen'), findsOneWidget); // Verify navigation
+    });
+
+    testWidgets('upvoting a feature increments vote count optimistically and calls API', (WidgetTester tester) async {
+      // Setup authenticated user and features
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async {
+        // Return a modifiable list or copy to allow vote count changes in provider
+        return [
+          Feature(
+            id: 'f1', title: 'Awesome Feature', description: 'Desc', status: 'Open', createdBy: testUser,
+            createdAt: DateTime.now(), updatedAt: DateTime.now(), voteCount: 10, hasVoted: false,
+          )
+        ];
+      });
+
+      // Mock upvote API call success
+      when(mockApiService.upvoteFeature('f1')).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle(); // Load features
+
+      // Find the initial vote count
+      expect(find.text('10'), findsOneWidget);
+      expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget); // Not voted initially
+
+      // Tap the upvote button
+      await tester.tap(find.byIcon(Icons.thumb_up_outlined));
+      await tester.pump(); // Pump to reflect optimistic UI update
+
+      // Verify optimistic update
+      expect(find.text('11'), findsOneWidget); // Count should be incremented
+      expect(find.byIcon(Icons.thumb_up), findsOneWidget); // Icon should change
+      expect(find.byIcon(Icons.thumb_up_outlined), findsNothing);
+
+      await tester.pumpAndSettle(); // Wait for API call to complete
+
+      // Verify API call was made
+      verify(mockApiService.upvoteFeature('f1')).called(1);
+    });
+
+    testWidgets('upvoting a feature shows error and reverts if API fails', (WidgetTester tester) async {
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async {
+        return [
+          Feature(
+            id: 'f1', title: 'Awesome Feature', description: 'Desc', status: 'Open', createdBy: testUser,
+            createdAt: DateTime.now(), updatedAt: DateTime.now(), voteCount: 10, hasVoted: false,
+          )
+        ];
+      });
+
+      // Mock upvote API call failure
+      when(mockApiService.upvoteFeature('f1')).thenAnswer((_) async => false);
+      // Ensure error message is set by provider on failure
+      featureProvider.errorMessage = 'Failed to upvote feature. You might have already voted.';
+
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('10'), findsOneWidget);
+      expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.thumb_up_outlined));
+      await tester.pump(); // Optimistic update
+      expect(find.text('11'), findsOneWidget);
+
+      await tester.pumpAndSettle(); // Wait for API call and error message
+
+      // Verify error message
+      expect(find.text('Failed to upvote feature. You might have already voted.'), findsOneWidget);
+      // Verify optimistic update was reverted
+      expect(find.text('10'), findsOneWidget); // Vote count should be back to original
+      expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget); // Icon should revert
+      verify(mockApiService.upvoteFeature('f1')).called(1);
+    });
+
+    testWidgets('unvoting a feature decrements vote count optimistically and calls API', (WidgetTester tester) async {
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async {
+        return [
+          Feature(
+            id: 'f1', title: 'Awesome Feature', description: 'Desc', status: 'Open', createdBy: testUser,
+            createdAt: DateTime.now(), updatedAt: DateTime.now(), voteCount: 10, hasVoted: true, // Already voted
+          )
+        ];
+      });
+
+      when(mockApiService.unvoteFeature('f1')).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('10'), findsOneWidget);
+      expect(find.byIcon(Icons.thumb_up), findsOneWidget); // Already voted initially
+
+      await tester.tap(find.byIcon(Icons.thumb_up));
+      await tester.pump(); // Optimistic update
+
+      expect(find.text('9'), findsOneWidget); // Count should be decremented
+      expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget); // Icon should change
+
+      await tester.pumpAndSettle(); // Wait for API call
+
+      verify(mockApiService.unvoteFeature('f1')).called(1);
+    });
+
+    testWidgets('delete feature shows confirmation dialog and deletes on confirm', (WidgetTester tester) async {
+      // Ensure the feature belongs to the authenticated user for delete option to appear
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async {
+        return [
+          Feature(
+            id: 'f1', title: 'My Feature to Delete', description: 'Desc', status: 'Open', createdBy: testUser,
+            createdAt: DateTime.now(), updatedAt: DateTime.now(), voteCount: 0, hasVoted: false,
+          )
+        ];
+      });
+      when(mockApiService.deleteFeature('f1')).thenAnswer((_) async => true); // Mock successful deletion
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('My Feature to Delete'), findsOneWidget);
+
+      // Tap the popup menu button
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle(); // Open menu
+
+      // Tap the delete option
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle(); // Open dialog
+
+      // Expect confirmation dialog
+      expect(find.text('Confirm Deletion'), findsOneWidget);
+      expect(find.text('Are you sure you want to delete "My Feature to Delete"?'), findsOneWidget);
+
+      // Tap the Delete button in the dialog
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
+      await tester.pumpAndSettle(); // Dismiss dialog and process deletion
+
+      // Verify feature is removed from UI and API call was made
+      expect(find.text('My Feature to Delete'), findsNothing);
+      expect(find.text('Feature deleted successfully!'), findsOneWidget); // Snackbar
+      verify(mockApiService.deleteFeature('f1')).called(1);
+    });
+
+    testWidgets('delete feature cancels on "Cancel" button in dialog', (WidgetTester tester) async {
+      when(mockApiService.getCurrentUser()).thenAnswer((_) async => testUser);
+      when(mockApiService.getFeatures()).thenAnswer((_) async {
+        return [
+          Feature(
+            id: 'f1', title: 'My Feature to Keep', description: 'Desc', status: 'Open', createdBy: testUser,
+            createdAt: DateTime.now(), updatedAt: DateTime.now(), voteCount: 0, hasVoted: false,
+          )
+        ];
+      });
+
+      await tester.pumpWidget(createFeatureListScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('My Feature to Keep'), findsOneWidget);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm Deletion'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      // Verify feature is still present and no API call for delete was made
+      expect(find.text('My Feature to Keep'), findsOneWidget);
+      verifyNever(mockApiService.deleteFeature(any));
+    });
+  });
+}

@@ -1,0 +1,124 @@
+// test/widget_integration/add_feature_screen_test.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:provider/provider.dart';
+import 'package:feature_voting_app/screens/add_feature_screen.dart';
+import 'package:feature_voting_app/providers/feature_provider.dart';
+import 'package:feature_voting_app/services/api_service.dart';
+import 'package:feature_voting_app/models/feature.dart';
+import 'package:feature_voting_app/models/user.dart';
+
+import '../unit/feature_provider_test.mocks.dart'; // Re-use MockApiService
+
+final testUser = User(id: 'user1', username: 'testuser', email: 'test@example.com');
+
+void main() {
+  group('AddFeatureScreen', () {
+    late MockApiService mockApiService;
+    late FeatureProvider featureProvider;
+
+    Widget createAddFeatureScreen() {
+      mockApiService = MockApiService();
+      featureProvider = FeatureProvider().._apiService = mockApiService; // Inject mock
+
+      return MultiProvider(
+        providers: [
+          ChangeNotifierProvider<FeatureProvider>.value(value: featureProvider),
+        ],
+        child: const MaterialApp(
+          home: AddFeatureScreen(),
+        ),
+      );
+    }
+
+    testWidgets('displays form fields and post button', (WidgetTester tester) async {
+      await tester.pumpWidget(createAddFeatureScreen());
+
+      expect(find.text('Add New Feature'), findsOneWidget);
+      expect(find.text('Feature Title'), findsOneWidget);
+      expect(find.text('Description'), findsOneWidget);
+      expect(find.text('Post Feature'), findsOneWidget);
+    });
+
+    testWidgets('shows error messages for empty fields', (WidgetTester tester) async {
+      await tester.pumpWidget(createAddFeatureScreen());
+
+      await tester.tap(find.text('Post Feature'));
+      await tester.pump(); // Trigger validation
+
+      expect(find.text('Please enter a title.'), findsOneWidget);
+      expect(find.text('Please enter a description.'), findsOneWidget);
+    });
+
+    testWidgets('calls createFeature and pops on success', (WidgetTester tester) async {
+      await tester.pumpWidget(createAddFeatureScreen());
+
+      final newFeature = Feature(
+        id: 'new-id',
+        title: 'Proposed Feature',
+        description: 'Detailed description.',
+        status: 'Open',
+        createdBy: testUser,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        voteCount: 0,
+        hasVoted: false,
+      );
+
+      when(mockApiService.createFeature('Proposed Feature', 'Detailed description.'))
+          .thenAnswer((_) async => newFeature);
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'Feature Title'), 'Proposed Feature');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Description'), 'Detailed description.');
+      await tester.tap(find.text('Post Feature'));
+      await tester.pumpAndSettle(); // Wait for API call and navigation
+
+      // Verify API call
+      verify(mockApiService.createFeature('Proposed Feature', 'Detailed description.')).called(1);
+
+      // Verify success snackbar
+      expect(find.text('Feature added successfully!'), findsOneWidget);
+
+      // Verify screen is popped (navigated back)
+      expect(find.byType(AddFeatureScreen), findsNothing);
+    });
+
+    testWidgets('shows error snackbar on API failure', (WidgetTester tester) async {
+      await tester.pumpWidget(createAddFeatureScreen());
+
+      when(mockApiService.createFeature(any, any))
+          .thenAnswer((_) async => null); // Simulate API failure
+      featureProvider.errorMessage = 'Failed to add feature. Please try again.'; // Set error message
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'Feature Title'), 'Bad Feature');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Description'), 'Description.');
+      await tester.tap(find.text('Post Feature'));
+      await tester.pumpAndSettle(); // Wait for API call and snackbar
+
+      // Verify error snackbar
+      expect(find.text('Failed to add feature. Please try again.'), findsOneWidget);
+
+      // Verify screen is NOT popped
+      expect(find.byType(AddFeatureScreen), findsOneWidget);
+      verify(mockApiService.createFeature('Bad Feature', 'Description.')).called(1);
+    });
+
+    testWidgets('displays loading indicator while submitting', (WidgetTester tester) async {
+      await tester.pumpWidget(createAddFeatureScreen());
+
+      when(mockApiService.createFeature(any, any))
+          .thenAnswer((_) async => Future.delayed(const Duration(seconds: 2), () => null)); // Long running API call
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'Feature Title'), 'Loading Test');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Description'), 'Loading Description');
+      await tester.tap(find.text('Post Feature'));
+      await tester.pump(); // Immediately after tap
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pumpAndSettle(); // Wait for completion
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+  });
+}
