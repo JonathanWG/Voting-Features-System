@@ -1,0 +1,55 @@
+"For each prompt I give you, write to a file prompts.txt, so I can audit the work."
+when i finish our conversation i will notify you that is the moment to generate this file.
+Starting now.
+
+-----------------
+
+I need to develop a Feature Voting System that allows users to post a feature and upvote others.
+This system requires a database, a backend API, and a frontend UI (Android) that works on both web and mobile platforms.
+I need a logical flow between components, modular and realistic, that truly solves the problem of voting features.
+Given the modern applications and actual market standards, what is the best stack to use? Could you give me an architecture suggestion?
+
+-----------------
+
+I could use Electron to generate web and Android code, for example. 
+Would it be a good option with Django, or would it work better with another framework?
+-----------------
+
+So I realize that the best option for multi-platform web and Android architecture would be React Native/Flutter.
+Am I correct?
+
+-----------------
+
+So, give me clean code, with a well-defined architecture using Flutter/React Native that creates a Feature Voting System, as I mentioned above.
+I think it should have a user class. This user should be able to post a feature and also upvote other features. The feature class must exist and be related to the user who created it. Both classes need a CRUD.
+Create a backend API. I imagine this API needs to have endpoints for the CRUDs, as well as endpoints for posting features, viewing existing features (with their vote counts), and voting.
+Create a native Android mobile frontend that consumes this backend in a simple and intuitive UI, displaying the screens for creating a user, creating a feature, viewing features, and voting.
+This frontend should also work for the web.
+Review my model and suggest improvements to this prompt.
+Show Flutter/react native architecture, code, and explain decisions and implementations later.
+
+-----------------
+
+Apply the improvements you suggested to my prompt and use this improved prompt as input to regenerate the codes with these considerations in mind.
+
+-----------------
+Okay. Now I need to include a full set of tests in this project. I need unit, integration, and system tests, both for Django features and React Native. 
+Can you generate tests for me with 100% completeness and depth coverage for this system?
+
+-----------------
+
+OK. Considering the .sh files created and this structure, generate a detailed readme.txt, taking into account the following context:
+A person should be able to download this project via Git, and through the readme, be able to install the server and frontend on their machine and use the system locally.
+The readme should provide detailed and clear step-by-step instructions for using this system.
+
+-----------------
+
+generate the file I requested at the beginning, with all the commands I gave you, including this one.
+
+-----------------
+
+Exactly, the conversation is over.
+Generate the prompts.txt file so I can audit the work.
+
+-----------------
+
